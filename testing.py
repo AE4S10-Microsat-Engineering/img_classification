@@ -5,6 +5,7 @@ import kornia.augmentation as K
 import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
+import random as rnd
 
 # Load an image using PIL and convert it to a PyTorch tensor
 def load_image(image_path):
@@ -22,7 +23,7 @@ def display_images(original, transformed, titles=["Original", "Transformed"]):
         ax.axis("off")
     plt.show()
 
-def display_images_grid(original_image, transformed_images, title_original="Original", title_transformed="Transformed"):
+def display_images_grid(original_image, transformed_images, title_original="Original", titles_transformed="Transformed"):
     """
     Displays the original image in the top-left corner and a grid of transformed images.
 
@@ -35,6 +36,14 @@ def display_images_grid(original_image, transformed_images, title_original="Orig
     Returns:
     - None: Displays the images in a grid.
     """
+    if titles_transformed == str:
+        titles_transformed = [titles_transformed]*len(transformed_images)
+    else:
+        for i,item in enumerate(transformed_images):
+            titles_transformed[i] = f"{titles_transformed[i]}"
+    print(f"{len(transformed_images)}, {len(titles_transformed)}")
+    print(titles_transformed)
+
     num_transformed = len(transformed_images)
     grid_size = int(np.ceil(np.sqrt(num_transformed + 1)))  # Calculate grid size to fit all images
 
@@ -51,7 +60,7 @@ def display_images_grid(original_image, transformed_images, title_original="Orig
     # Plot transformed images
     for i, transformed in enumerate(transformed_images, start=1):
         axes[i].imshow(kornia.tensor_to_image(transformed))
-        axes[i].set_title(f"{title_transformed} {i}")
+        axes[i].set_title(f"trans:{i}, {titles_transformed[i-1]} ")
         axes[i].axis("off")
 
     # Turn off unused subplots
@@ -94,7 +103,7 @@ def apply_colorjitter(image_tensor, probability=1):
     return transformed_image.squeeze(0)  # Remove batch dimension
 
 # Example transformation pipeline
-def apply_geotransformations(image_tensor, rotAngles=[-45,45], translate=[0.25,0.25], scale=[0.75,1.25], shearAngles=[-45,45], probability=1):
+def apply_geotransformations(image_tensor, rotAngles=[-45,45], translate=[0.25,0.25], scale=[0.75,1.25], shearAngles=[-45,45], probability=1, padding="zeros"):
     """
     rotAngles are angles for rotation, either single value to specifiy range, or give the complete range
     translate specifices the max x and y translation allowed, the number signifies the percentage of movement allowed
@@ -114,7 +123,7 @@ def apply_geotransformations(image_tensor, rotAngles=[-45,45], translate=[0.25,0
     if type(shearAngles) == int or type(shearAngles) == float:
         shearAngles = [-shearAngles,shearAngles]
     transform = torch.nn.Sequential(
-        K.RandomAffine(degrees=rotAngles, translate=translate, scale=scale, shear=shearAngles, p=probability, padding_mode="zeros")
+        K.RandomAffine(degrees=rotAngles, translate=translate, scale=scale, shear=shearAngles, p=probability, padding_mode=padding)
     )
     # Apply transformations
     transformed_image = transform(image_tensor.unsqueeze(0))  # Add batch dimension
@@ -127,7 +136,21 @@ if __name__ == "__main__":
         image_path = os.path.join(os.getcwd(),f"./training_data/EuroSAT_RGB/AnnualCrop/AnnualCrop_{n+1}.jpg") # Replace with your image path
         original_image = load_image(image_path)
         transformed_images = []
+        rots = []
+        trans = []
+        scales = []
+        shears = []
+        labels = []
         for n in range(15):
-            transformed_image = apply_geotransformations(original_image)
+            rot = rnd.randrange(-50,50,step=1)/10
+            rots.append(rot)
+            tran = rnd.randrange(0,10,step=1)/100
+            trans.append(tran)
+            scale = rnd.randrange(80,120,step=1)/100
+            scales.append(scale)
+            shear = rnd.randrange(-50,50,step=1)/10
+            shears.append(shear)
+            labels.append(f"r:{rot},t:{tran},s:{scale},sh:{shear}")
+            transformed_image = apply_geotransformations(original_image, rotAngles=[rot,rot], translate=[tran,tran], scale=[scale,scale], shearAngles=[shear,shear], probability=1, padding="zeros")
             transformed_images.append(transformed_image)
-        display_images_grid(original_image, transformed_images)
+        display_images_grid(original_image, transformed_images, titles_transformed=labels)
