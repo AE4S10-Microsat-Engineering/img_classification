@@ -41,8 +41,6 @@ def display_images_grid(original_image, transformed_images, title_original="Orig
     else:
         for i,item in enumerate(transformed_images):
             titles_transformed[i] = f"{titles_transformed[i]}"
-    print(f"{len(transformed_images)}, {len(titles_transformed)}")
-    print(titles_transformed)
 
     num_transformed = len(transformed_images)
     grid_size = int(np.ceil(np.sqrt(num_transformed + 1)))  # Calculate grid size to fit all images
@@ -62,7 +60,7 @@ def display_images_grid(original_image, transformed_images, title_original="Orig
     # Plot transformed images
     for i, transformed in enumerate(transformed_images, start=1):
         axes[i].imshow(kornia.tensor_to_image(transformed))
-        axes[i].set_title(f"trans:{i}, {titles_transformed[i-1]} ")
+        axes[i].set_title(f"TR:{i}, {titles_transformed[i-1]} ")
         axes[i].axis("off")
 
     # Turn off unused subplots
@@ -156,18 +154,41 @@ def shift_image(image, num_rows, start_row):
     if start_row + num_rows > h:
         raise ValueError(f"Removing {num_rows} rows from row {start_row} exceeds image height ({h}).")
 
-    # Create a black padding tensor
-    black_rows = torch.zeros((c, num_rows, w), dtype=image.dtype, device=image.device)
+    if num_rows < 0: #skips lines due to velocity too high, created black region
+        # Create a black padding tensor
+        num_rows = abs(num_rows)
+        black_rows = torch.zeros((c, num_rows, w), dtype=image.dtype, device=image.device)
 
-    # Remove rows starting from start_row
-    top_part = image[:, :start_row, :]  # Rows before start_row
-    bottom_part = image[:, start_row + num_rows:, :]  # Rows after start_row + num_rows
+        # Remove rows starting from start_row
+        top_part = image[:, :start_row, :]  # Rows before start_row
+        bottom_part = image[:, start_row + num_rows:, :]  # Rows after start_row + num_rows
 
-    # Combine the remaining parts and add black rows at the top
-    cropped_image = torch.cat([top_part, bottom_part], dim=1)
-    transformed_image = torch.cat([cropped_image, black_rows], dim=1)
+        # Combine the remaining parts and add black rows at the top
+        cropped_image = torch.cat([top_part, bottom_part], dim=1)
+        transformed_image = torch.cat([cropped_image, black_rows], dim=1)
 
-    return transformed_image
+        return transformed_image
+    elif num_rows > 0: #adds lines due to velocity too low
+        # Take both sections with a row of overlap
+        repeat = int(num_rows/30)+1
+        top_part = image[:, :start_row, :]  # Rows before start_row
+        bottom_part = image[:, start_row + (num_rows*repeat):, :]  # Rows after start_row + num_rows
+        for i in range(0,num_rows):
+            repeat = int(num_rows/30)+1
+            # row_copy = image[:, start_row+(i*repeat):start_row+(i*repeat)+1, :] # This is basically instrument breaking down
+            row_copy = image[:, start_row+i:start_row+i+1, :]
+            while repeat > 0:
+                repeat_image = torch.cat([top_part, row_copy], dim=1)
+                top_part = repeat_image
+                repeat -= 1
+        
+        # Combine the remaining parts and add black rows at the top
+        cropped_image = torch.cat([repeat_image, bottom_part], dim=1)
+        transformed_image = cropped_image[:, :63, :]
+
+        return transformed_image
+    else:
+        return image
 
 def get_random_dataset():
     setname_list = ["AnnualCrop","Forest","HerbaceousVegetation","Highway","Industrial","Pasture","PermanentCrop","Residential","River","SeaLake"]
@@ -176,50 +197,58 @@ def get_random_dataset():
     dataset_path = f"{setname}"
     return dataset_path
 
+
+def simulate_earth_curvature(image, curvature=0.01, padding="zeros"):
+    """
+    Simulates the effect of Earth's curvature on an image.
+
+    Parameters:
+    - image: Input image (PyTorch tensor of shape CxHxW, normalized to [0, 1]).
+    - curvature: The curvature factor; higher values increase the curvature effect.
+
+    Returns:
+    - Transformed image with simulated Earth's curvature.
+    """
+
+    c, h, w = image.shape
+
+    # Create a grid of coordinates
+    y, x = torch.meshgrid(torch.linspace(-1, 1, h), torch.linspace(-1, 1, w), indexing="ij")
+    y, x = y.to(image.device), x.to(image.device)
+
+    # Apply curvature transformation (parabolic distortion)
+    x_curved = x - curvature * (y**2)
+    y_curved = y - curvature * (x**2)
+
+    # Normalize the coordinates to [-1, 1] for Kornia's remap function
+    map_x = (2 * x_curved / (w - 1)) - 1  # Normalize x to [-1, 1]
+    map_y = (2 * y / (h - 1)) - 1  # Normalize y to [-1, 1]
+
+    # # Debug: Visualize the y_curved grid
+    # if curvature > 0:
+    #     plt.imshow(y_curved.cpu().numpy(), cmap="viridis")
+    #     plt.title("Curved Y Grid")
+    #     plt.colorbar()
+    #     plt.show()
+
+    # Ensure map_x and map_y have batch dimension [B, H, W]
+    map_x = x.unsqueeze(0)  # Add batch dimension
+    map_y = y_curved.unsqueeze(0)  # Add batch dimension
+
+    # Apply the transformation using remap
+    transformed_image = kornia.geometry.transform.remap(
+        image.unsqueeze(0), map_x, map_y, align_corners=True, normalized_coordinates=True, padding_mode=padding
+    )
+    return transformed_image.squeeze(0)
+
 # Main script
 if __name__ == "__main__":
-    # for n in range(10):
-    #     print(n)
-    #     image_path = os.path.join(os.getcwd(),f"./training_data/EuroSAT_RGB/AnnualCrop/AnnualCrop_{n+1}.jpg") # Replace with your image path
-    #     original_image = load_image(image_path)
-    #     transformed_images = []
-    #     rots = []
-    #     trans = []
-    #     scales = []
-    #     shears = []
-    #     labels = []
-    #     for n in range(15):
-    #         rot = rnd.randrange(-50,50,step=1)/10
-    #         rots.append(rot)
-    #         tran = rnd.randrange(0,10,step=1)/100
-    #         trans.append(tran)
-    #         scale = rnd.randrange(80,120,step=1)/100
-    #         scales.append(scale)
-    #         shear = rnd.randrange(-50,50,step=1)/10
-    #         shears.append(shear)
-    #         labels.append(f"r:{rot},t:{tran},s:{scale},sh:{shear}")
-    #         transformed_image = apply_geotransformations(original_image, rotAngles=[rot,rot], translate=[tran,tran], scale=[scale,scale], shearAngles=[shear,shear], probability=1, padding="zeros")
-    #         transformed_images.append(transformed_image)
-    #     display_images_grid(original_image, transformed_images, titles_transformed=labels)
+    shift = True
+    geotransform = True
+    curvature = True #effect is about 0.01318595200908693m of height difference. So not needed for eurosat data.    
     
-    # for n in range(10):
-    #     setname = get_random_dataset()
-    #     image_path = os.path.join(os.getcwd(),f"./training_data/EuroSAT_RGB/{setname}/{setname}_{n+1}.jpg") # Replace with your image path
-    #     original_image = load_image(image_path)
-    #     transformed_images = []
-    #     starts = []
-    #     nums = []
-    #     labels = []
-    #     for n in range(15):
-    #         num = rnd.randrange(0,15)
-    #         nums.append(num)
-    #         start = rnd.randrange(0,63-num)
-    #         starts.append(start)
-    #         labels.append(f"s:{start},n:{num}")
-    #         transformed_image = shift_image(original_image, num_rows=num, start_row=start)
-    #         transformed_images.append(transformed_image)
-    #     display_images_grid(original_image, transformed_images, titles_transformed=labels, figure_title=setname)
-
+    probability_geo = 1
+    padding="zeros"
 
     for n in range(10):
         setname = get_random_dataset()
@@ -227,33 +256,41 @@ if __name__ == "__main__":
         image_path = os.path.join(os.getcwd(),f"./training_data/EuroSAT_RGB/{setname}/{setname}_{n+1}.jpg") # Replace with your image path
         original_image = load_image(image_path)
         transformed_images = []
-        rots = []
-        trans = []
-        scales = []
-        shears = []
-        starts = []
-        nums = []
         labels = []
         for n in range(15):
-            rot = rnd.randrange(-50,50,step=1)/10
-            rots.append(rot)
-            tran = rnd.randrange(0,10,step=1)/100
-            trans.append(tran)
-            scale = rnd.randrange(80,120,step=1)/100
-            scales.append(scale)
-            shear = rnd.randrange(-50,50,step=1)/10
-            shears.append(shear)
-            if rnd.randrange(0,99) <= 50: #adds a probability factor
-                num = rnd.randrange(0,15)
-                nums.append(num)
-                start = rnd.randrange(0,63-num)
-                starts.append(start)
-                transformed_image = shift_image(original_image, num_rows=num, start_row=start)
+            transformed_image = original_image
+
+
+            if rnd.randrange(0,99) <= 100 and shift: #adds a probability factor
+                num = rnd.randrange(-7,63)
+                start = rnd.randrange(0,63-abs(num))
+                transformed_image = shift_image(transformed_image, num_rows=num, start_row=start)
             else:
-                start = -1
-                num = -1
-                transformed_image = original_image
-            labels.append(f"r:{rot},t:{tran},s:{scale},sh:{shear},c:{start},n:{num}")
-            transformed_image = apply_geotransformations(transformed_image, rotAngles=[rot,rot], translate=[tran,tran], scale=[scale,scale], shearAngles=[shear,shear], probability=1, padding="zeros")
+                start = 0
+                num = 0
+            
+            if geotransform:
+                rot = rnd.randrange(-50,50,step=1)/10
+                tran = rnd.randrange(0,10,step=1)/100
+                scale = rnd.randrange(80,120,step=1)/100
+                shear = rnd.randrange(-50,50,step=1)/10
+                transformed_image = apply_geotransformations(transformed_image, rotAngles=[rot,rot], translate=[tran,tran], scale=[scale,scale], shearAngles=[shear,shear], probability=probability_geo, padding=padding)
+            else:
+                rot = 0
+                tran = 0
+                scale = 0
+                shear = 0
+
+            if curvature:
+                curv = rnd.randrange(0,100)/1000
+                transformed_image = simulate_earth_curvature(transformed_image, curvature=curv, padding=padding)
+            else:
+                curv = 0
+
+            labels.append(f"r:{rot},t:{tran},s:{scale},sh:{shear},\n st:{start},n:{num},crv:{curv}")
+                        
             transformed_images.append(transformed_image)
+
+            
+
         display_images_grid(original_image, transformed_images, titles_transformed=labels, figure_title=setname)
