@@ -157,15 +157,19 @@ def shift_image(image, num_rows, start_row):
     if num_rows < 0: #skips lines due to velocity too high, created black region
         # Create a black padding tensor
         num_rows = abs(num_rows)
-        black_rows = torch.zeros((c, num_rows, w), dtype=image.dtype, device=image.device)
+        repeat = int(num_rows/30)+2
+        black_rows = torch.zeros((c, num_rows*(repeat-1), w), dtype=image.dtype, device=image.device)
 
-        # Remove rows starting from start_row
         top_part = image[:, :start_row, :]  # Rows before start_row
-        bottom_part = image[:, start_row + num_rows:, :]  # Rows after start_row + num_rows
+        bottom_part = image[:, start_row + (num_rows*repeat):, :]  # Rows after start_row + num_rows
+        for i in range(0,num_rows):
+            row_include = image[:, start_row+(i*repeat):start_row+(i*repeat)+1, :]
+            top_part = torch.cat([top_part, row_include], dim=1)            
 
         # Combine the remaining parts and add black rows at the top
         cropped_image = torch.cat([top_part, bottom_part], dim=1)
         transformed_image = torch.cat([cropped_image, black_rows], dim=1)
+        transformed_image = transformed_image[:, :63, :]
 
         return transformed_image
     elif num_rows > 0: #adds lines due to velocity too low
@@ -248,7 +252,7 @@ if __name__ == "__main__":
     curvature = True #effect is about 0.01318595200908693m of height difference. So not needed for eurosat data.    
     
     probability_geo = 1
-    padding="zeros"
+    padding="reflection"
 
     for n in range(10):
         setname = get_random_dataset()
@@ -261,8 +265,8 @@ if __name__ == "__main__":
             transformed_image = original_image
 
 
-            if rnd.randrange(0,99) <= 100 and shift: #adds a probability factor
-                num = rnd.randrange(-7,63)
+            if rnd.randrange(0,99) <= 33 and shift: #adds a probability factor
+                num = rnd.randrange(-62,62)
                 start = rnd.randrange(0,63-abs(num))
                 transformed_image = shift_image(transformed_image, num_rows=num, start_row=start)
             else:
