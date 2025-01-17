@@ -157,7 +157,7 @@ def shift_image(image, num_rows, start_row):
     if num_rows < 0: #skips lines due to velocity too high, created black region
         # Create a black padding tensor
         num_rows = abs(num_rows)
-        repeat = int(num_rows/30)+2
+        repeat = int(num_rows/60)+2
         black_rows = torch.zeros((c, num_rows*(repeat-1), w), dtype=image.dtype, device=image.device)
 
         top_part = image[:, :start_row, :]  # Rows before start_row
@@ -174,11 +174,11 @@ def shift_image(image, num_rows, start_row):
         return transformed_image
     elif num_rows > 0: #adds lines due to velocity too low
         # Take both sections with a row of overlap
-        repeat = int(num_rows/30)+1
+        repeat = int(num_rows/60)+1
         top_part = image[:, :start_row, :]  # Rows before start_row
         bottom_part = image[:, start_row + (num_rows*repeat):, :]  # Rows after start_row + num_rows
         for i in range(0,num_rows):
-            repeat = int(num_rows/30)+1
+            repeat = int(num_rows/60)+1
             # row_copy = image[:, start_row+(i*repeat):start_row+(i*repeat)+1, :] # This is basically instrument breaking down
             row_copy = image[:, start_row+i:start_row+i+1, :]
             while repeat > 0:
@@ -195,7 +195,8 @@ def shift_image(image, num_rows, start_row):
         return image
 
 def get_random_dataset():
-    setname_list = ["AnnualCrop","Forest","HerbaceousVegetation","Highway","Industrial","Pasture","PermanentCrop","Residential","River","SeaLake"]
+    # setname_list = ["AnnualCrop","Forest","HerbaceousVegetation","Highway","Industrial","Pasture","PermanentCrop","Residential","River","SeaLake"]
+    setname_list = ["AnnualCrop","Highway","Industrial","Pasture","PermanentCrop","Residential","River"]
     index = rnd.randrange(0,len(setname_list))
     setname = setname_list[index]
     dataset_path = f"{setname}"
@@ -274,7 +275,7 @@ if __name__ == "__main__":
                 num = 0
             
             if geotransform:
-                rot = rnd.randrange(-50,50,step=1)/10
+                rot = rnd.randrange(-100,100,step=1)/10
                 tran = rnd.randrange(0,10,step=1)/100
                 scale = rnd.randrange(80,120,step=1)/100
                 shear = rnd.randrange(-50,50,step=1)/10
