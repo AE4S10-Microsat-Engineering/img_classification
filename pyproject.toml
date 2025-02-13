@@ -9,8 +9,8 @@ dependencies = [
     "ipywidgets>=8.1.5",
     "matplotlib>=3.10.0",
     "numpy~=1.26.0",
-    "ruff>=0.8.4",
-    "scikit-learn>=1.6.0",
+    "ruff>=0.9.6",
+    "scikit-learn>=1.6.1",
     "tqdm>=4.67.1",
 ]
 
