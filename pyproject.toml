@@ -7,8 +7,10 @@ requires-python = ">=3.12"
 dependencies = [
     "ipykernel>=6.29.5",
     "ipywidgets>=8.1.5",
+    "kornia>=0.8.0",
     "matplotlib>=3.10.0",
     "numpy~=1.26.0",
+    "pillow>=11.0.0",
     "ruff>=0.9.6",
     "scikit-learn>=1.6.1",
     "tqdm>=4.67.1",
@@ -26,3 +28,15 @@ torchvision = [
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
 explicit = true
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9.6",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.format]
+indent-style = "tab"
+exclude = ["./reference/*.ipynb"]
