@@ -67,8 +67,24 @@ def display_images_grid(original_image, transformed_images, title_original="Orig
     for j in range(len(transformed_images) + 1, len(axes)):
         axes[j].axis("off")
 
-    plt.tight_layout()
-    plt.show()
+    plt.tight_layout()    
+    plt.pause(0.001)
+
+    # Ask the user if they want to save the image
+    save_image = input("Do you want to save the image? (y/n): ").strip().lower()
+
+    if save_image == 'y':
+        # Ask for the filename and format
+        filename = input("Enter the filename (without extension): ").strip()
+        file_format = input("Enter the file format (png, jpg, pdf, svg): ").strip().lower()
+        
+        # Save the figure
+        plt.savefig(f"{filename}.{file_format}", dpi=300, bbox_inches='tight')
+        print(f"Image saved as {filename}.{file_format}")
+    else:
+        print("Image not saved.")
+
+    plt.close()
 
 # Example transformation pipeline
 def apply_rotation(image_tensor, angles={-45,45}, probability=1):
@@ -174,11 +190,11 @@ def shift_image(image, num_rows, start_row):
         return transformed_image
     elif num_rows > 0: #adds lines due to velocity too low
         # Take both sections with a row of overlap
-        repeat = int(num_rows/60)+1
+        repeat = int(num_rows/30)+1
         top_part = image[:, :start_row, :]  # Rows before start_row
         bottom_part = image[:, start_row + (num_rows*repeat):, :]  # Rows after start_row + num_rows
         for i in range(0,num_rows):
-            repeat = int(num_rows/60)+1
+            repeat = int(num_rows/30)+1
             # row_copy = image[:, start_row+(i*repeat):start_row+(i*repeat)+1, :] # This is basically instrument breaking down
             row_copy = image[:, start_row+i:start_row+i+1, :]
             while repeat > 0:
@@ -252,7 +268,8 @@ if __name__ == "__main__":
     geotransform = True
     curvature = True #effect is about 0.01318595200908693m of height difference. So not needed for eurosat data.    
     
-    probability_geo = 1
+    probability_geo = 1 # Probability that geo transformation is applied
+    maxCurve = 100 # Set curvatrue limit  (100 is already fairly extreme)
     padding="reflection"
 
     for n in range(10):
@@ -265,9 +282,8 @@ if __name__ == "__main__":
         for n in range(15):
             transformed_image = original_image
 
-
             if rnd.randrange(0,99) <= 33 and shift: #adds a probability factor
-                num = rnd.randrange(-62,62)
+                num = rnd.randrange(-62,62) # Negative values are less nice to work with
                 start = rnd.randrange(0,63-abs(num))
                 transformed_image = shift_image(transformed_image, num_rows=num, start_row=start)
             else:
@@ -287,7 +303,7 @@ if __name__ == "__main__":
                 shear = 0
 
             if curvature:
-                curv = rnd.randrange(0,100)/1000
+                curv = rnd.randrange(0,maxCurve)/1000
                 transformed_image = simulate_earth_curvature(transformed_image, curvature=curv, padding=padding)
             else:
                 curv = 0
